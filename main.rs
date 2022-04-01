@@ -1,9 +1,13 @@
-#![feature(trace_macros)]
+use bitfield::*;
 
-use seq::seq;
+#[bitfield]
+pub struct MyFourBytes {
+    a: B1,
+    b: B3,
+    c: B4,
+    d: B24,
+}
 
-seq!(N in 0..4 {
-    compile_error!(concat!("error number ", stringify!(N)));
-});
-
-fn main() {}
+fn main() {
+    assert_eq!(std::mem::size_of::<MyFourBytes>(), 4);
+}
