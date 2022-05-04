@@ -1,13 +1,16 @@
 use bitfield::*;
 
-#[bitfield]
-pub struct MyFourBytes {
-    a: B1,
-    b: B3,
-    c: B4,
-    d: B24,
+type A = B1;
+type B = B3;
+type C = B4;
+type D = B23;
+
+// #[bitfield]
+pub struct NotQuiteFourBytes {
+    a: A,
+    b: B,
+    c: C,
+    d: D,
 }
 
-fn main() {
-    assert_eq!(std::mem::size_of::<MyFourBytes>(), 4);
-}
+fn main() {}

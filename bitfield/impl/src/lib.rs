@@ -4,8 +4,7 @@ use quote::{format_ident, quote, spanned::Spanned};
 use syn::{parse_macro_input, parse_quote};
 
 #[proc_macro_attribute]
-pub fn bitfield(args: TokenStream, input: TokenStream) -> TokenStream {
-    let _ = args;
+pub fn bitfield(_args: TokenStream, input: TokenStream) -> TokenStream {
     let mut item = parse_macro_input!(input as syn::ItemStruct);
     let item_name = &item.ident;
     use syn::{Fields, FieldsNamed};
@@ -27,6 +26,7 @@ pub fn bitfield(args: TokenStream, input: TokenStream) -> TokenStream {
         let impl_ts = quote! {
             impl #item_name {
                 pub fn new() -> Self {
+                    let _ : MultipleOfEight<[(); (#size) % 8]>;
                     Self {
                         data: [0; (#size) / 8],
                     }
@@ -36,7 +36,11 @@ pub fn bitfield(args: TokenStream, input: TokenStream) -> TokenStream {
                 #(#setters)*
             }
         };
-        quote!(#item #impl_ts).into()
+        let item_with_repr_c = quote! {
+            #[repr(C)]
+            #item
+        };
+        quote!(#item_with_repr_c #impl_ts).into()
     } else {
         let err_ts = syn::Error::new(item.__span(), "bitfield only works on named structs")
             .to_compile_error();
@@ -63,7 +67,7 @@ fn expand_getter_fn(f: &syn::Field, offset_ts: &TokenStream2) -> TokenStream2 {
                 let len = act_ed - act_st + 1;
                 let st_offset = act_st - i * 8;
                 let mask = if len < 8 { ((1 << len) - 1) << st_offset } else { 0xff };
-                let act_val = ((val & mask) >> st_offset) as #u_ty_ts;  
+                let act_val = ((val & mask) >> st_offset) as #u_ty_ts;
                 sum_val |= (act_val << (act_st - st));
             }
             sum_val
@@ -96,4 +100,25 @@ fn expand_setter_fn(f: &syn::Field, offset_ts: &TokenStream2) -> TokenStream2 {
             }
         }
     )
+}
+
+#[proc_macro]
+pub fn impl_bits_specifiers(_input: TokenStream) -> TokenStream {
+    let mut res_ts = TokenStream2::new();
+    for i in 1usize..=64 {
+        let name = format_ident!("B{}", i);
+        let bits = i;
+        let type_name = match i {
+            1..=8 => format_ident!("u8"),
+            9..=16 => format_ident!("u16"),
+            17..=32 => format_ident!("u32"),
+            33..=64 => format_ident!("u64"),
+            _ => unreachable!(),
+        };
+        let ts = quote! {
+            impl_specifier!(#name, #bits, #type_name);
+        };
+        res_ts.extend(ts);
+    }
+    res_ts.into()
 }

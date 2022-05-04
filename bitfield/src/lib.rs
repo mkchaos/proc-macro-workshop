@@ -10,11 +10,26 @@
 //
 // From the perspective of a user of this crate, they get all the necessary APIs
 // (macro, trait, struct) through the one bitfield crate.
+pub mod checks;
+
 pub use bitfield_impl::bitfield;
-// TODO other things
-mod bit_types;
-pub use bit_types::*;
+use bitfield_impl::impl_bits_specifiers;
+
+pub type MultipleOfEight<T> = <<T as checks::Array>::Marker as checks::TotalSizeIsMultipleOfEightBits>::Check;
+
 pub trait Specifier {
     type U;
     const BITS: usize;
 }
+
+macro_rules! impl_specifier {
+    ($name: ident, $bits: expr, $type: ty) => {
+        pub struct $name;
+        impl Specifier for $name {
+            type U = $type;
+            const BITS: usize = $bits;
+        }
+    };
+}
+
+impl_bits_specifiers!();
