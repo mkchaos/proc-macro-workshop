@@ -15,11 +15,55 @@ pub mod checks;
 pub use bitfield_impl::bitfield;
 use bitfield_impl::impl_bits_specifiers;
 
-pub type MultipleOfEight<T> = <<T as checks::Array>::Marker as checks::TotalSizeIsMultipleOfEightBits>::Check;
-
 pub trait Specifier {
     type U;
     const BITS: usize;
+
+    fn set(data: &mut [u8], offset: usize, val: Self::U);
+    fn get(data: &[u8], offset: usize) -> Self::U;
+}
+
+fn set_data(data: &mut [u8], offset: usize, val: u64, val_bits: usize) {
+    let st = offset / 8 * 8;
+    let end = offset + val_bits;
+    for i in (st..end).step_by(8) {
+        let idx = i / 8;
+        let mut mask = 0u8;
+        let upd = if i < offset {
+            // low mask
+            mask |= !(!0u8 << (offset - i));
+            val << (offset - i)
+        } else {
+            val >> (i - offset)
+        } as u8;
+        if i + 8 > end {
+            // high mask
+            mask |= !0u8 << (end - i);
+        }
+        data[idx] = (data[idx] & mask) | (upd & !mask);
+    }
+}
+
+fn get_data(data: &[u8], offset: usize, val_bits: usize) -> u64 {
+    let mut res = 0u64;
+    let st = offset / 8 * 8;
+    let end = offset + val_bits;
+    for i in (st..end).step_by(8) {
+        let idx = i / 8;
+        let mut mask = 0u8;
+        if offset > i {
+            mask |= !(!0u8 << (offset - i));
+        }
+        if i + 8 > end {
+            mask |= !0u8 << (end - i);
+        }
+        res |= if offset > i {
+            ((data[idx] & !mask) as u64) >> (offset - i)
+        } else {
+            ((data[idx] & !mask) as u64) << (i - offset)
+        };
+    }
+    res
 }
 
 macro_rules! impl_specifier {
@@ -28,6 +72,13 @@ macro_rules! impl_specifier {
         impl Specifier for $name {
             type U = $type;
             const BITS: usize = $bits;
+
+            fn set(data: &mut [u8], offset: usize, val: Self::U) {
+                set_data(data, offset, val as u64, Self::BITS);
+            }
+            fn get(data: &[u8], offset: usize) -> Self::U {
+                get_data(data, offset, Self::BITS) as Self::U
+            }
         }
     };
 }

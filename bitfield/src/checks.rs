@@ -51,3 +51,5 @@ impl TotalSizeIsMultipleOfEightBits for ZeroMod8 {
     type Check = ();
 }
 
+pub type MultipleOfEight<T> =
+    <<T as Array>::Marker as TotalSizeIsMultipleOfEightBits>::Check;
