@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::{format_ident, quote, spanned::Spanned};
+use quote::{format_ident, quote, quote_spanned, spanned::Spanned};
 use syn::{parse_macro_input, parse_quote, DeriveInput, Result};
 
 #[proc_macro_attribute]
@@ -20,13 +20,40 @@ pub fn bitfield(_args: TokenStream, input: TokenStream) -> TokenStream {
                 (getter, setter)
             })
             .unzip();
+        let check_bits: Vec<_> = named
+            .iter()
+            .filter_map(|f| {
+                let attrs_len = f.attrs.len();
+                if attrs_len == 1 {
+                    let attr = &f.attrs[0];
+                    let meta = attr.parse_meta().unwrap();
+                    if let syn::Meta::NameValue(nv) = &meta {
+                        let path = &nv.path;
+                        let path_str = quote!(#path).to_string();
+                        if path_str == "bits" {
+                            let lit = &nv.lit;
+                            let lit_str = quote!(#lit).to_string();
+                            let lit_num = lit_str.parse::<usize>().unwrap();
+                            // println!("bits {}", lit_num);
+                            let ty = &f.ty;
+                            return Some(quote_spanned!(lit.span()=>
+                                const _: [(); #lit_num] = [(); <#ty as Specifier>::BITS];
+                            ));
+                        }
+                    }
+                }
+                None
+            })
+            .collect();
         let size = cur_acc_bits;
         let data = quote!(pub data: [u8; (#size) / 8]);
         item.fields = Fields::Named(parse_quote!({#data}));
         let impl_ts = quote! {
+            #(#check_bits)*
+            const _ : checks::MultipleOfEight<[(); (#size) % 8]> = ();
             impl #item_name {
                 pub fn new() -> Self {
-                    let _ : checks::MultipleOfEight<[(); (#size) % 8]>;
+                    
                     Self {
                         data: [0; (#size) / 8],
                     }
@@ -105,6 +132,21 @@ fn expand_bit_specifier(ast: &DeriveInput) -> Result<TokenStream2> {
         )
     });
     let enum_length = variants.iter().len();
+    let mut bits = 0_usize;
+    loop {
+        let bits_power = 1 << bits;
+        if bits_power == enum_length {
+            break;
+        } else if bits_power > enum_length {
+            return Err(syn::Error::new(
+                ast.generics.__span(),
+                "BitfieldSpecifier expected a number of variants which is a power of 2",
+            ));
+        } else {
+            bits += 1;
+        }
+    }
+
     // let mut enum_value = 0_u64;
     // let u64s = variants.iter().clone().map(|v| {
     //     if let Some((_, e)) = &v.discriminant {
@@ -117,7 +159,7 @@ fn expand_bit_specifier(ast: &DeriveInput) -> Result<TokenStream2> {
     //         expr_after_counter += 1;
     //     }
     //     quote!(
-            
+
     //     )
     // });
     // for variant in variants {
@@ -137,7 +179,7 @@ fn expand_bit_specifier(ast: &DeriveInput) -> Result<TokenStream2> {
     // }
     let res_ts = quote! {
         impl Specifier for #name {
-            const BITS: usize = get_bits_from_length(#enum_length);
+            const BITS: usize = #bits;
             type U = Self;
 
             fn set(data: &mut [u8], offset: usize, val: Self::U) {

@@ -13,16 +13,6 @@
 pub mod checks;
 pub use bitfield_impl::*;
 
-pub const fn get_bits_from_length(len: usize) -> usize {
-    let mut res = 1;
-    let mut bits = 0;
-    while res < len {
-        res <<= 1;
-        bits += 1;
-    }
-    bits
-}
-
 pub trait Specifier {
     type U;
     const BITS: usize;
