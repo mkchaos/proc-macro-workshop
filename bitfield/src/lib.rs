@@ -11,9 +11,17 @@
 // From the perspective of a user of this crate, they get all the necessary APIs
 // (macro, trait, struct) through the one bitfield crate.
 pub mod checks;
+pub use bitfield_impl::*;
 
-pub use bitfield_impl::bitfield;
-use bitfield_impl::impl_bits_specifiers;
+pub const fn get_bits_from_length(len: usize) -> usize {
+    let mut res = 1;
+    let mut bits = 0;
+    while res < len {
+        res <<= 1;
+        bits += 1;
+    }
+    bits
+}
 
 pub trait Specifier {
     type U;
@@ -23,7 +31,7 @@ pub trait Specifier {
     fn get(data: &[u8], offset: usize) -> Self::U;
 }
 
-fn set_data(data: &mut [u8], offset: usize, val: u64, val_bits: usize) {
+pub fn set_data(data: &mut [u8], offset: usize, val: u64, val_bits: usize) {
     let st = offset / 8 * 8;
     let end = offset + val_bits;
     for i in (st..end).step_by(8) {
@@ -44,7 +52,7 @@ fn set_data(data: &mut [u8], offset: usize, val: u64, val_bits: usize) {
     }
 }
 
-fn get_data(data: &[u8], offset: usize, val_bits: usize) -> u64 {
+pub fn get_data(data: &[u8], offset: usize, val_bits: usize) -> u64 {
     let mut res = 0u64;
     let st = offset / 8 * 8;
     let end = offset + val_bits;
@@ -64,6 +72,27 @@ fn get_data(data: &[u8], offset: usize, val_bits: usize) -> u64 {
         };
     }
     res
+}
+
+impl Specifier for bool {
+    type U = bool;
+    const BITS: usize = 1;
+
+    fn get(data: &[u8], offset: usize) -> Self::U {
+        let idx = offset / 8;
+        let off = offset % 8;
+        data[idx] & (1 << off) != 0
+    }
+
+    fn set(data: &mut [u8], offset: usize, val: Self::U) {
+        let idx = offset / 8;
+        let off = offset % 8;
+        if val {
+            data[idx] |= 1 << off;
+        } else {
+            data[idx] &= 1 << off;
+        }
+    }
 }
 
 macro_rules! impl_specifier {
