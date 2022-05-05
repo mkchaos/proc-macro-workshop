@@ -43,6 +43,7 @@ impl Array for [(); 7] {
     type Marker = SevenMod8;
 }
 
+
 pub trait TotalSizeIsMultipleOfEightBits {
     type Check;
 }
@@ -53,3 +54,23 @@ impl TotalSizeIsMultipleOfEightBits for ZeroMod8 {
 
 pub type MultipleOfEight<T> =
     <<T as Array>::Marker as TotalSizeIsMultipleOfEightBits>::Check;
+
+pub enum True {}
+pub enum False {}
+pub trait ArrayMarker {
+    type Marker;
+}
+impl ArrayMarker for [(); 0] {
+    type Marker = True;
+}
+impl ArrayMarker for [(); 1] {
+    type Marker = False;
+}
+pub trait DiscriminantInRange {
+    type Check;
+}
+impl DiscriminantInRange for True {
+    type Check = ();
+}
+pub type EnumInRange<T> =
+    <<T as ArrayMarker>::Marker as DiscriminantInRange>::Check;

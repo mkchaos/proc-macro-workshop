@@ -53,7 +53,7 @@ pub fn bitfield(_args: TokenStream, input: TokenStream) -> TokenStream {
             const _ : checks::MultipleOfEight<[(); (#size) % 8]> = ();
             impl #item_name {
                 pub fn new() -> Self {
-                    
+
                     Self {
                         data: [0; (#size) / 8],
                     }
@@ -111,12 +111,6 @@ pub fn derive(input: TokenStream) -> TokenStream {
 fn expand_bit_specifier(ast: &DeriveInput) -> Result<TokenStream2> {
     use syn::{Data, DataEnum};
     let name = &ast.ident;
-    // let mut variants_counter = 0usize;
-    // let mut expr = Option::<Expr>::None;
-    // let mut expr_after_counter = 0usize;
-    // let mut exprs_need_check = Vec::<TokenStream2>::new();
-    // #[allow(unused_assignments)]
-    // let mut u64_from_items = Vec::new();
     let variants = if let Data::Enum(DataEnum { variants, .. }) = &ast.data {
         variants
     } else {
@@ -125,12 +119,6 @@ fn expand_bit_specifier(ast: &DeriveInput) -> Result<TokenStream2> {
             "bitfield_specifier only works on enums",
         ));
     };
-    let enum_values = variants.iter().map(|v| {
-        let id = &v.ident;
-        quote!(
-            #name::#id
-        )
-    });
     let enum_length = variants.iter().len();
     let mut bits = 0_usize;
     loop {
@@ -146,38 +134,34 @@ fn expand_bit_specifier(ast: &DeriveInput) -> Result<TokenStream2> {
             bits += 1;
         }
     }
-
-    // let mut enum_value = 0_u64;
-    // let u64s = variants.iter().clone().map(|v| {
-    //     if let Some((_, e)) = &v.discriminant {
-    //         if expr.is_some() {
-    //             exprs_need_check.push(quote!(#expr+#expr_after_counter));
-    //         }
-    //         expr = Some(e.clone());
-    //         expr_after_counter = 0;
-    //     } else {
-    //         expr_after_counter += 1;
-    //     }
-    //     quote!(
-
-    //     )
-    // });
-    // for variant in variants {
-    //     variants_counter += 1;
-    //     if let Some((_, e)) = &variant.discriminant {
-    //         if expr.is_some() {
-    //             exprs_need_check.push(quote!(#expr+#expr_after_counter));
-    //         }
-    //         expr = Some(e.clone());
-    //         expr_after_counter = 0;
-    //     } else {
-    //         expr_after_counter += 1;
-    //     }
-    // }
-    // if expr.is_some() {
-    //     exprs_need_check.push(quote!(#expr+#expr_after_counter));
-    // }
+    let mut expr = quote!(0);
+    let mut after_expr_counter = 0usize;
+    let check_enum_ranges: Vec<_> = variants.iter().map(|v| {
+        if let Some((_, e)) = &v.discriminant {
+            expr = quote!(#e);
+            after_expr_counter = 0;
+        } else {
+            after_expr_counter += 1;
+        }
+        // valid if 0 else 1
+        let check_array_size = quote!(
+            {
+                const tmp: usize = (#expr) as usize + #after_expr_counter;
+                if tmp < #enum_length && tmp >= 0 { 0usize } else { 1usize }
+            }
+        );
+        quote_spanned! ( v.ident.span()=>
+            const _: checks::EnumInRange<[(); #check_array_size]> = ();
+        )
+    }).collect();
+    let enum_values = variants.iter().map(|v| {
+        let id = &v.ident;
+        quote!(
+            #name::#id
+        )
+    });
     let res_ts = quote! {
+        #(#check_enum_ranges)*
         impl Specifier for #name {
             const BITS: usize = #bits;
             type U = Self;
